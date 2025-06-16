@@ -214,7 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.setReferenceBtn.textContent = referenceState ? 'Referenz gesetzt' : 'Referenz festlegen';
 
         if (referenceState) {
-            dom.referenceDetails.classList.add('visible');
             const changeAbs = currentTotalCost - referenceState.cost;
             const changePerc = referenceState.cost > 0 ? (changeAbs / referenceState.cost) * 100 : 0;
             const sign = changeAbs >= 0 ? '+' : '';
@@ -288,16 +287,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function syncAllSlidersToInputs(){
-        const tempVal = parseFloat(dom.tempZuluft.value);
-        if(!isNaN(tempVal)) {
-            dom.tempZuluftSlider.min = (tempVal - 6).toFixed(1);
-            dom.tempZuluftSlider.max = (tempVal + 6).toFixed(1);
-        }
-        const volVal = parseFloat(dom.volumenstrom.value);
-        if(!isNaN(volVal)) {
-            dom.volumenstromSlider.min = Math.round(volVal * 0.5 / 100) * 100;
-            dom.volumenstromSlider.max = Math.round(volVal * 1.5 / 100) * 100;
-        }
         syncSliderToInput(dom.volumenstrom, dom.volumenstromSlider, dom.volumenstromLabel);
         syncSliderToInput(dom.tempZuluft, dom.tempZuluftSlider, dom.tempZuluftLabel, true);
         syncSliderToInput(dom.rhZuluft, dom.rhZuluftSlider, dom.rhZuluftLabel, true);
@@ -305,6 +294,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function syncSliderToInput(input, slider, label, isFloat = false) {
         const newValue = parseFloat(input.value);
         if(isNaN(newValue)) return;
+        
+        if (input.id === 'volumenstrom') {
+            slider.min = Math.round(newValue * 0.5 / 100) * 100;
+            slider.max = Math.round(newValue * 1.5 / 100) * 100;
+        }
+        if (input.id === 'tempZuluft') {
+            slider.min = (newValue - 6).toFixed(1);
+            slider.max = (newValue + 6).toFixed(1);
+        }
+
         slider.value = newValue;
         label.textContent = isFloat ? newValue.toFixed(1) : newValue;
     }
@@ -317,11 +316,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         dom.preisStrom.readOnly = (basis === 'kaelte_eer');
         dom.preisKaelte.readOnly = (basis === 'strom_eer');
+        dom.eer.readOnly = (basis === 'kaelte_eer');
+
 
         if (basis === 'strom_eer') {
             if(!isNaN(strom) && !isNaN(eer) && eer > 0) dom.preisKaelte.value = (strom / eer).toFixed(3);
         } else if (basis === 'kaelte_eer') {
-            if(!isNaN(kaelte) && !isNaN(eer) && eer > 0) dom.preisStrom.value = (kaelte * eer).toFixed(2);
+            if(!isNaN(kaelte) && !isNaN(strom) && kaelte > 0) dom.eer.value = (strom / kaelte).toFixed(2);
         }
     }
     
@@ -335,64 +336,29 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- INITIALIZATION: A simple, explicit, and non-conflicting setup ---
     function addEventListeners() {
-        // --- Buttons ---
+        allInteractiveElements.forEach(el => {
+            const eventType = (el.type === 'checkbox' || el.type === 'radio' || el.tagName === 'SELECT') ? 'change' : 'input';
+            el.addEventListener(eventType, (e) => {
+                if (e.target.type === 'number') enforceLimits(e.target);
+                
+                if (e.target.id.includes('Slider')) {
+                    const inputId = e.target.id.replace('Slider', '');
+                    const isFloat = inputId !== 'volumenstrom';
+                    const value = isFloat ? parseFloat(e.target.value).toFixed(1) : e.target.value;
+                    dom[inputId].value = value;
+                }
+                
+                syncAllSlidersToInputs();
+                handleKuehlerToggle();
+                updateCostDependencies();
+                calculateAll();
+            });
+        });
+        
         dom.resetBtn.addEventListener('click', resetToDefaults);
         dom.resetSlidersBtn.addEventListener('click', resetSlidersToRef);
         dom.setReferenceBtn.addEventListener('click', handleSetReference);
-
-        // --- All regular inputs and selects ---
-        const inputsToListen = [
-            dom.tempAussen, dom.rhAussen, dom.druck, dom.preisWaerme, dom.xZuluft, 
-            dom.tempHeizVorlauf, dom.tempHeizRuecklauf, dom.tempKuehlVorlauf, dom.tempKuehlRuecklauf,
-            dom.stundenHeizen, dom.stundenKuehlen, dom.kuehlerAktiv, dom.feuchteSollTyp, dom.kuehlmodus
-        ];
-        inputsToListen.forEach(input => {
-            const eventType = input.type === 'checkbox' || input.tagName === 'SELECT' ? 'change' : 'input';
-            input.addEventListener(eventType, () => {
-                enforceLimits(input);
-                if (['kuehlerAktiv', 'kuehlmodus', 'feuchteSollTyp'].includes(input.id)) {
-                    handleKuehlerToggle();
-                }
-                calculateAll();
-            });
-        });
-        
-        // --- Cost dependency inputs ---
-        const costDepInputs = [dom.preisStrom, dom.eer, dom.preisKaelte];
-        costDepInputs.forEach(input => input.addEventListener('input', () => {
-            enforceLimits(input);
-            updateCostDependencies();
-            calculateAll();
-        }));
-        dom.kaelteBasisInputs.forEach(radio => radio.addEventListener('change', () => {
-            updateCostDependencies();
-            calculateAll();
-        }));
-        
-        // --- Synced inputs (Number boxes) ---
-        const syncedNumberInputs = [dom.volumenstrom, dom.tempZuluft, dom.rhZuluft];
-        syncedNumberInputs.forEach(input => {
-            input.addEventListener('input', () => {
-                enforceLimits(input);
-                syncAllSlidersToInputs();
-                calculateAll();
-            });
-        });
-        
-        // --- Synced inputs (Sliders) ---
-        const sliders = [dom.volumenstromSlider, dom.tempZuluftSlider, dom.rhZuluftSlider];
-        sliders.forEach(slider => {
-            slider.addEventListener('input', () => {
-                const inputId = slider.id.replace('Slider', '');
-                const isFloat = inputId !== 'volumenstrom';
-                const value = isFloat ? parseFloat(slider.value).toFixed(1) : slider.value;
-                dom[inputId].value = value;
-                dom[inputId+'Label'].textContent = value;
-                calculateAll();
-            });
-        });
     }
 
     addEventListeners();
