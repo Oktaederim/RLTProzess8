@@ -176,8 +176,8 @@ input:checked + .slider:before { transform: translateX(26px); }
 }
 .state-node { background-color: #fff; }
 .state-node.inactive { opacity: 0.6; border-style: dashed; background-color: #fafafa;}
-.state-node p { display: flex; justify-content: space-between; align-items: baseline; }
-.state-node p .label { font-weight: 500; color: var(--label-color); margin-right: 0.5rem; font-size: 0.8rem;}
+.state-node p { display: flex; justify-content: space-between; }
+.state-node p .label { font-weight: 500; color: var(--label-color); margin-right: 0.5rem;}
 
 
 .component-node {
